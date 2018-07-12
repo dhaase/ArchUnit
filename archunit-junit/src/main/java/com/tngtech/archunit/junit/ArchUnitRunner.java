@@ -15,16 +15,11 @@
  */
 package com.tngtech.archunit.junit;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-
 import com.tngtech.archunit.Internal;
 import com.tngtech.archunit.PublicAPI;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.extension.ArchUnitExtensions;
 import org.junit.runner.Description;
 import org.junit.runner.notification.RunNotifier;
 import org.junit.runners.ParentRunner;
@@ -32,6 +27,8 @@ import org.junit.runners.model.FrameworkField;
 import org.junit.runners.model.FrameworkMethod;
 import org.junit.runners.model.InitializationError;
 import org.junit.runners.model.Statement;
+
+import java.util.*;
 
 import static com.tngtech.archunit.PublicAPI.Usage.ACCESS;
 import static com.tngtech.archunit.junit.ArchTestExecution.elementShouldBeIgnored;
@@ -66,14 +63,26 @@ public class ArchUnitRunner extends ParentRunner<ArchTestExecution> {
     @Override
     protected Statement classBlock(RunNotifier notifier) {
         final Statement statement = super.classBlock(notifier);
+        final Statement statementWithExtensionFinisher = withExtensionFinisher(statement);
         return new Statement() {
             @Override
             public void evaluate() throws Throwable {
                 try {
-                    statement.evaluate();
+                    statementWithExtensionFinisher.evaluate();
                 } finally {
                     cache.clear(getTestClass().getJavaClass());
                 }
+            }
+        };
+    }
+
+    private Statement withExtensionFinisher(final Statement statement) {
+        final JavaClasses classes = cache.get().getClassesToAnalyzeFor(getTestClass().getJavaClass());
+        return new Statement() {
+            @Override
+            public void evaluate() throws Throwable {
+                statement.evaluate();
+                new ArchUnitExtensions().finish(classes);
             }
         };
     }
