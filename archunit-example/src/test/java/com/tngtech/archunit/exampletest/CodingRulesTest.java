@@ -9,9 +9,6 @@ import org.junit.experimental.categories.Category;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.GeneralCodingRules.*;
 
-//import com.tngtech.archunit.visual.VisualExtension;
-//import org.junit.AfterClass;
-
 @Category(Example.class)
 public class CodingRulesTest {
 
@@ -36,9 +33,4 @@ public class CodingRulesTest {
     public void classes_should_not_use_java_util_logging() {
         NO_CLASSES_SHOULD_USE_JAVA_UTIL_LOGGING.check(classes);
     }
-
-    /*@AfterClass
-    public static void createVisualization() {
-        VisualExtension.createVisualization(classes);
-    }*/
 }
