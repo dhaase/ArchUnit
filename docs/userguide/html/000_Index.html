@@ -543,7 +543,8 @@ using any plain Java unit testing framework.</p>
 <div class="sect2">
 <h3 id="_module_overview"><a class="anchor" href="#_module_overview"></a>1.1. Module Overview</h3>
 <div class="paragraph">
-<p>ArchUnit consists of two production modules: <code>archunit</code> and <code>archunit-junit</code>.
+<p>ArchUnit consists of the following production modules: <code>archunit</code>, <code>archunit-junit4</code> as well
+as <code>archunit-junit5-api</code>, <code>archunit-junit5-engine</code> and <code>archunit-junit5-engine-api</code>.
 Also relevant for end users is the <code>archunit-example</code> module.</p>
 </div>
 <div class="sect3">
@@ -555,14 +556,26 @@ the domain objects, as well as the rule syntax infrastructure.</p>
 </div>
 </div>
 <div class="sect3">
-<h4 id="_module_archunit_junit"><a class="anchor" href="#_module_archunit_junit"></a>1.1.2. Module archunit-junit</h4>
+<h4 id="_module_archunit_junit4"><a class="anchor" href="#_module_archunit_junit4"></a>1.1.2. Module archunit-junit4</h4>
 <div class="paragraph">
 <p>This module contains the infrastructure to integrate with JUnit 4, in particular
 the <code>ArchUnitRunner</code> to cache imported classes.</p>
 </div>
 </div>
 <div class="sect3">
-<h4 id="_module_archunit_example"><a class="anchor" href="#_module_archunit_example"></a>1.1.3. Module archunit-example</h4>
+<h4 id="_modules_archunit_junit5"><a class="anchor" href="#_modules_archunit_junit5"></a>1.1.3. Modules archunit-junit5-*</h4>
+<div class="paragraph">
+<p>These modules contain the infrastructure to integrate with JUnit 5 and contain the respective
+infrastructure to cache imported classes between test runs.
+<code>archunit-junit5-api</code> contains the user API to write tests with ArchUnit&#8217;s JUnit 5 support,
+<code>archunit-junit5-engine</code> contains the runtime engine to run those tests.
+<code>archunit-junit5-engine-api</code> contains API code for tools that want more detailes control
+over running ArchUnit JUnit 5 tests, in particular a <code>FieldSelector</code> which can be used to
+instruct the <code>ArchUnitTestEngine</code> to run a specific rule field (compare <a href="#_junit_4_5_support">JUnit 4 &amp; 5 Support</a>).</p>
+</div>
+</div>
+<div class="sect3">
+<h4 id="_module_archunit_example"><a class="anchor" href="#_module_archunit_example"></a>1.1.4. Module archunit-example</h4>
 <div class="paragraph">
 <p>This module contains example architecture rules and sample code that violates these rules.
 Look here to get inspiration on how to set up rules for your project, or at
@@ -593,8 +606,8 @@ Maven Central:</p>
 <div class="content">
 <pre class="highlightjs highlight nowrap"><code class="language-xml hljs" data-lang="xml">&lt;dependency&gt;
     &lt;groupId&gt;com.tngtech.archunit&lt;/groupId&gt;
-    &lt;artifactId&gt;archunit-junit&lt;/artifactId&gt;
-    &lt;version&gt;0.9.0&lt;/version&gt;
+    &lt;artifactId&gt;archunit-junit4&lt;/artifactId&gt;
+    &lt;version&gt;0.9.1&lt;/version&gt;
     &lt;scope&gt;test&lt;/scope&gt;
 &lt;/dependency&gt;</code></pre>
 </div>
@@ -603,7 +616,7 @@ Maven Central:</p>
 <div class="title">build.gradle</div>
 <div class="content">
 <pre class="highlightjs highlight nowrap"><code>dependencies {
-    testCompile 'com.tngtech.archunit:archunit-junit:0.9.0'
+    testCompile 'com.tngtech.archunit:archunit-junit4:0.9.1'
 }</code></pre>
 </div>
 </div>
@@ -625,7 +638,7 @@ A typical Maven configuration could look like this:</p>
         ...
         &lt;plugin&gt;
             &lt;artifactId&gt;maven-surefire-plugin&lt;/artifactId&gt;
-            &lt;version&gt;2.21.0&lt;/version&gt;
+            &lt;version&gt;2.22.0&lt;/version&gt;
             &lt;dependencies&gt;
                 &lt;dependency&gt;
                     &lt;groupId&gt;org.junit.platform&lt;/groupId&gt;
@@ -635,7 +648,7 @@ A typical Maven configuration could look like this:</p>
                 &lt;dependency&gt;
                     &lt;groupId&gt;com.tngtech.archunit&lt;/groupId&gt;
                     &lt;artifactId&gt;archunit-junit5-engine&lt;/artifactId&gt;
-                    &lt;version&gt;0.9.0&lt;/version&gt;
+                    &lt;version&gt;0.9.1&lt;/version&gt;
                 &lt;/dependency&gt;
             &lt;/dependencies&gt;
         &lt;/plugin&gt;
@@ -647,7 +660,7 @@ A typical Maven configuration could look like this:</p>
     &lt;dependency&gt;
         &lt;groupId&gt;com.tngtech.archunit&lt;/groupId&gt;
         &lt;artifactId&gt;archunit-junit5-api&lt;/artifactId&gt;
-        &lt;version&gt;0.9.0&lt;/version&gt;
+        &lt;version&gt;0.9.1&lt;/version&gt;
         &lt;scope&gt;test&lt;/scope&gt;
     &lt;/dependency&gt;
 &lt;/dependencies&gt;
@@ -677,8 +690,8 @@ To run ArchUnit JUnit 5 tests within an IDE, it might unfortunately be necessary
 <div class="content">
 <pre class="highlightjs highlight nowrap"><code>dependencies {
     ...
-    testCompile 'com.tngtech.archunit:archunit-junit5-api:0.9.0'
-    testRuntime 'com.tngtech.archunit:archunit-junit5-engine:0.9.0'
+    testCompile 'com.tngtech.archunit:archunit-junit5-api:0.9.1'
+    testRuntime 'com.tngtech.archunit:archunit-junit5-engine:0.9.1'
 }</code></pre>
 </div>
 </div>
@@ -695,7 +708,7 @@ context, include the core ArchUnit dependency from Maven Central:</p>
 <pre class="highlightjs highlight nowrap"><code class="language-xml hljs" data-lang="xml">&lt;dependency&gt;
     &lt;groupId&gt;com.tngtech.archunit&lt;/groupId&gt;
     &lt;artifactId&gt;archunit&lt;/artifactId&gt;
-    &lt;version&gt;0.9.0&lt;/version&gt;
+    &lt;version&gt;0.9.1&lt;/version&gt;
     &lt;scope&gt;test&lt;/scope&gt;
 &lt;/dependency&gt;</code></pre>
 </div>
@@ -704,7 +717,7 @@ context, include the core ArchUnit dependency from Maven Central:</p>
 <div class="title">build.gradle</div>
 <div class="content">
 <pre class="highlightjs highlight nowrap"><code>dependencies {
-   testCompile 'com.tngtech.archunit:archunit:0.9.0'
+   testCompile 'com.tngtech.archunit:archunit:0.9.1'
 }</code></pre>
 </div>
 </div>
@@ -870,7 +883,7 @@ class MyArchitectureTest {
 <div class="listingblock">
 <div class="content">
 <pre class="highlightjs highlight nowrap"><code class="language-java hljs" data-lang="java">noClasses().that().resideInAPackage("..source..")
-    .should().accessClassesThat().resideInAPackage("..foo..")</code></pre>
+    .should().dependOnClassesThat().resideInAPackage("..foo..")</code></pre>
 </div>
 </div>
 <div class="imageblock">
@@ -881,7 +894,7 @@ class MyArchitectureTest {
 <div class="listingblock">
 <div class="content">
 <pre class="highlightjs highlight nowrap"><code class="language-java hljs" data-lang="java">classes().that().resideInAPackage("..foo..")
-    .should().onlyBeAccessed().byAnyPackage("..source.one..", "..foo..")</code></pre>
+    .should().onlyHaveDependentClassesThat().resideInAnyPackage("..source.one..", "..foo..")</code></pre>
 </div>
 </div>
 </div>
@@ -1729,6 +1742,9 @@ infixes, and then write assertions against those slices. At the moment this is f
 <pre class="highlightjs highlight nowrap"><code class="language-java hljs" data-lang="java">// sort classes by the first package after 'myapp'
 // then check those slices for cyclic dependencies
 SlicesRuleDefinition.slices().matching("..myapp.(*)..").should().beFreeOfCycles()
+
+// checks all subpackages of 'myapp' for cycles
+SlicesRuleDefinition.slices().matching("..myapp.(**)").should().notDependOnEachOther()
 
 // sort classes by packages between 'myapp' and 'service'
 // then check those slices for not having any dependencies on each other

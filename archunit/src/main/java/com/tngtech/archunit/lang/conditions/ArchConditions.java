@@ -25,19 +25,26 @@ import com.tngtech.archunit.Internal;
 import com.tngtech.archunit.PublicAPI;
 import com.tngtech.archunit.base.ChainableFunction;
 import com.tngtech.archunit.base.DescribedPredicate;
-import com.tngtech.archunit.base.Function;
 import com.tngtech.archunit.base.PackageMatcher;
 import com.tngtech.archunit.base.PackageMatchers;
 import com.tngtech.archunit.core.domain.AccessTarget;
+import com.tngtech.archunit.core.domain.AccessTarget.CodeUnitCallTarget;
+import com.tngtech.archunit.core.domain.AccessTarget.ConstructorCallTarget;
+import com.tngtech.archunit.core.domain.AccessTarget.FieldAccessTarget;
+import com.tngtech.archunit.core.domain.AccessTarget.MethodCallTarget;
 import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.Formatters;
 import com.tngtech.archunit.core.domain.JavaAccess;
 import com.tngtech.archunit.core.domain.JavaAnnotation;
 import com.tngtech.archunit.core.domain.JavaCall;
 import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.JavaCodeUnit;
+import com.tngtech.archunit.core.domain.JavaConstructor;
 import com.tngtech.archunit.core.domain.JavaConstructorCall;
 import com.tngtech.archunit.core.domain.JavaField;
 import com.tngtech.archunit.core.domain.JavaFieldAccess;
+import com.tngtech.archunit.core.domain.JavaMember;
+import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.domain.properties.CanBeAnnotated;
@@ -53,10 +60,21 @@ import com.tngtech.archunit.lang.conditions.ClassAccessesFieldCondition.ClassGet
 import com.tngtech.archunit.lang.conditions.ClassAccessesFieldCondition.ClassSetsFieldCondition;
 
 import static com.tngtech.archunit.PublicAPI.Usage.ACCESS;
+import static com.tngtech.archunit.base.DescribedPredicate.anyElementThat;
+import static com.tngtech.archunit.core.domain.Dependency.Functions.GET_ORIGIN_CLASS;
+import static com.tngtech.archunit.core.domain.Dependency.Functions.GET_TARGET_CLASS;
 import static com.tngtech.archunit.core.domain.Dependency.Predicates.dependencyOrigin;
 import static com.tngtech.archunit.core.domain.Dependency.Predicates.dependencyTarget;
 import static com.tngtech.archunit.core.domain.Formatters.ensureSimpleName;
 import static com.tngtech.archunit.core.domain.Formatters.formatLocation;
+import static com.tngtech.archunit.core.domain.JavaClass.Functions.GET_ACCESSES_FROM_SELF;
+import static com.tngtech.archunit.core.domain.JavaClass.Functions.GET_ACCESSES_TO_SELF;
+import static com.tngtech.archunit.core.domain.JavaClass.Functions.GET_CALLS_FROM_SELF;
+import static com.tngtech.archunit.core.domain.JavaClass.Functions.GET_CONSTRUCTOR_CALLS_FROM_SELF;
+import static com.tngtech.archunit.core.domain.JavaClass.Functions.GET_DIRECT_DEPENDENCIES_FROM_SELF;
+import static com.tngtech.archunit.core.domain.JavaClass.Functions.GET_DIRECT_DEPENDENCIES_TO_SELF;
+import static com.tngtech.archunit.core.domain.JavaClass.Functions.GET_FIELD_ACCESSES_FROM_SELF;
+import static com.tngtech.archunit.core.domain.JavaClass.Functions.GET_METHOD_CALLS_FROM_SELF;
 import static com.tngtech.archunit.core.domain.JavaClass.Functions.GET_PACKAGE_NAME;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.simpleName;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.simpleNameContaining;
@@ -130,6 +148,15 @@ public final class ArchConditions {
     }
 
     @PublicAPI(usage = ACCESS)
+    public static ArchCondition<JavaClass> onlyAccessFieldsThat(final DescribedPredicate<? super JavaField> predicate) {
+        ChainableFunction<JavaFieldAccess, FieldAccessTarget> getTarget = JavaAccess.Functions.Get.target();
+        DescribedPredicate<JavaFieldAccess> accessPredicate = getTarget.then(FieldAccessTarget.Functions.RESOLVE)
+                .is(anyElementThat(predicate.<JavaField>forSubType()));
+        return new ClassOnlyAccessesCondition<>(accessPredicate, GET_FIELD_ACCESSES_FROM_SELF)
+                .as("only access fields that " + predicate.getDescription());
+    }
+
+    @PublicAPI(usage = ACCESS)
     public static ArchCondition<JavaClass> callMethod(Class<?> owner, String methodName, Class<?>... parameterTypes) {
         return callMethodWhere(JavaCall.Predicates.target(owner(type(owner)))
                 .and(JavaCall.Predicates.target(name(methodName)))
@@ -149,8 +176,17 @@ public final class ArchConditions {
 
     @PublicAPI(usage = ACCESS)
     public static ArchCondition<JavaClass> callMethodWhere(final DescribedPredicate<? super JavaMethodCall> predicate) {
-        return new ClassCallsCodeUnitCondition(new CallMethodPredicate(predicate))
+        return new ClassAccessesCondition<>(predicate, GET_METHOD_CALLS_FROM_SELF)
                 .as("call method where " + predicate.getDescription());
+    }
+
+    @PublicAPI(usage = ACCESS)
+    public static ArchCondition<JavaClass> onlyCallMethodsThat(final DescribedPredicate<? super JavaMethod> predicate) {
+        ChainableFunction<JavaMethodCall, MethodCallTarget> getTarget = JavaAccess.Functions.Get.target();
+        DescribedPredicate<JavaMethodCall> callPredicate = getTarget.then(MethodCallTarget.Functions.RESOLVE)
+                .is(anyElementThat(predicate.<JavaMethod>forSubType()));
+        return new ClassOnlyAccessesCondition<>(callPredicate, GET_METHOD_CALLS_FROM_SELF)
+                .as("only call methods that " + predicate.getDescription());
     }
 
     @PublicAPI(usage = ACCESS)
@@ -173,33 +209,83 @@ public final class ArchConditions {
 
     @PublicAPI(usage = ACCESS)
     public static ArchCondition<JavaClass> callConstructorWhere(final DescribedPredicate<? super JavaConstructorCall> predicate) {
-        return new ClassCallsCodeUnitCondition(new CallConstructorPredicate(predicate))
+        return new ClassAccessesCondition<>(predicate, GET_CONSTRUCTOR_CALLS_FROM_SELF)
                 .as("call constructor where " + predicate.getDescription());
     }
 
     @PublicAPI(usage = ACCESS)
+    public static ArchCondition<JavaClass> onlyCallConstructorsThat(final DescribedPredicate<? super JavaConstructor> predicate) {
+        ChainableFunction<JavaConstructorCall, ConstructorCallTarget> getTarget = JavaAccess.Functions.Get.target();
+        DescribedPredicate<JavaConstructorCall> callPredicate = getTarget.then(ConstructorCallTarget.Functions.RESOLVE)
+                .is(anyElementThat(predicate.<JavaConstructor>forSubType()));
+        return new ClassOnlyAccessesCondition<>(callPredicate, GET_CONSTRUCTOR_CALLS_FROM_SELF)
+                .as("only call constructors that " + predicate.getDescription());
+    }
+
+    @PublicAPI(usage = ACCESS)
     public static ArchCondition<JavaClass> callCodeUnitWhere(DescribedPredicate<? super JavaCall<?>> predicate) {
-        return new ClassCallsCodeUnitCondition(predicate);
+        return new ClassAccessesCondition<>(predicate, GET_CALLS_FROM_SELF)
+                .as("call code unit where " + predicate.getDescription());
+    }
+
+    @PublicAPI(usage = ACCESS)
+    public static ArchCondition<JavaClass> onlyCallCodeUnitsThat(final DescribedPredicate<? super JavaCodeUnit> predicate) {
+        ChainableFunction<JavaCall<?>, CodeUnitCallTarget> getTarget = JavaAccess.Functions.Get.target();
+        DescribedPredicate<JavaCall<?>> callPredicate = getTarget.then(CodeUnitCallTarget.Functions.RESOLVE)
+                .is(anyElementThat(predicate.<JavaCodeUnit>forSubType()));
+        return new ClassOnlyAccessesCondition<>(callPredicate, GET_CALLS_FROM_SELF)
+                .as("only call code units that " + predicate.getDescription());
+    }
+
+    @PublicAPI(usage = ACCESS)
+    public static ArchCondition<JavaClass> onlyAccessMembersThat(final DescribedPredicate<? super JavaMember> predicate) {
+        ChainableFunction<JavaAccess<?>, AccessTarget> getTarget = JavaAccess.Functions.Get.target();
+        DescribedPredicate<JavaAccess<?>> accessPredicate = getTarget.then(AccessTarget.Functions.RESOLVE)
+                .is(anyElementThat(predicate.<JavaMember>forSubType()));
+        return new ClassOnlyAccessesCondition<>(accessPredicate, GET_ACCESSES_FROM_SELF)
+                .as("only access members that " + predicate.getDescription());
     }
 
     @PublicAPI(usage = ACCESS)
     public static ArchCondition<JavaClass> accessTargetWhere(DescribedPredicate<? super JavaAccess<?>> predicate) {
-        return new AnyAccessFromClassCondition("access target where", predicate);
+        return new ClassAccessesCondition<>(predicate, GET_ACCESSES_FROM_SELF);
     }
 
     @PublicAPI(usage = ACCESS)
     public static ArchCondition<JavaClass> accessClassesThat(final DescribedPredicate<? super JavaClass> predicate) {
-        @SuppressWarnings({"RedundantTypeArguments", "unchecked"})
-        ChainableFunction<JavaAccess<?>, AccessTarget> getTarget =
-                JavaAccess.Functions.Get.<JavaAccess<?>, AccessTarget>target(); // This seems to be a compiler nightmare...
-        return new AnyAccessFromClassCondition("access classes that",
-                getTarget.then(Get.<JavaClass>owner()).is(predicate));
+        ChainableFunction<JavaAccess<?>, AccessTarget> getTarget = JavaAccess.Functions.Get.target();
+        DescribedPredicate<JavaAccess<?>> accessPredicate = getTarget.then(Get.<JavaClass>owner()).is(predicate);
+        return new ClassAccessesCondition<>(accessPredicate, GET_ACCESSES_FROM_SELF)
+                .as("access classes that " + predicate.getDescription());
+    }
+
+    @PublicAPI(usage = ACCESS)
+    public static ArchCondition<JavaClass> onlyAccessClassesThat(final DescribedPredicate<? super JavaClass> predicate) {
+        ChainableFunction<JavaAccess<?>, AccessTarget> getTarget = JavaAccess.Functions.Get.target();
+        DescribedPredicate<JavaAccess<?>> accessPredicate = getTarget.then(Get.<JavaClass>owner()).is(predicate);
+        return new AllAccessesCondition("only access classes that", accessPredicate, GET_ACCESSES_FROM_SELF);
+    }
+
+    @PublicAPI(usage = ACCESS)
+    public static ArchCondition<JavaClass> dependOnClassesThat(final DescribedPredicate<? super JavaClass> predicate) {
+        return new AnyDependencyCondition(
+                "depend on classes that " + predicate.getDescription(),
+                GET_TARGET_CLASS.is(predicate),
+                GET_DIRECT_DEPENDENCIES_FROM_SELF);
+    }
+
+    @PublicAPI(usage = ACCESS)
+    public static ArchCondition<JavaClass> onlyDependOnClassesThat(final DescribedPredicate<? super JavaClass> predicate) {
+        return new AllDependenciesCondition(
+                "only depend on classes that " + predicate.getDescription(),
+                GET_TARGET_CLASS.is(predicate),
+                GET_DIRECT_DEPENDENCIES_FROM_SELF);
     }
 
     @PublicAPI(usage = ACCESS)
     public static ArchCondition<JavaClass> onlyBeAccessedByClassesThat(DescribedPredicate<? super JavaClass> predicate) {
-        return new AllAccessesToClassCondition("only be accessed by classes that",
-                JavaAccess.Functions.Get.origin().then(Get.<JavaClass>owner()).is(predicate));
+        return new AllAccessesCondition("only be accessed by classes that",
+                JavaAccess.Functions.Get.origin().then(Get.<JavaClass>owner()).is(predicate), GET_ACCESSES_TO_SELF);
     }
 
     /**
@@ -218,8 +304,9 @@ public final class ArchConditions {
      */
     @PublicAPI(usage = ACCESS)
     public static ArchCondition<JavaClass> accessClassesThatResideInAnyPackage(String... packageIdentifiers) {
-        return new AnyAccessFromClassCondition("access classes that reside in",
-                JavaAccessPackagePredicate.forAccessTarget().matching(packageIdentifiers));
+        JavaAccessPackagePredicate predicate = JavaAccessPackagePredicate.forAccessTarget().matching(packageIdentifiers);
+        return new ClassAccessesCondition<>(predicate, GET_ACCESSES_FROM_SELF)
+                .as("access classes that reside in " + predicate);
     }
 
     /**
@@ -228,8 +315,8 @@ public final class ArchConditions {
      */
     @PublicAPI(usage = ACCESS)
     public static ArchCondition<JavaClass> onlyBeAccessedByAnyPackage(String... packageIdentifiers) {
-        return new AllAccessesToClassCondition("only be accessed by",
-                JavaAccessPackagePredicate.forAccessOrigin().matching(packageIdentifiers));
+        return new AllAccessesCondition("only be accessed by",
+                JavaAccessPackagePredicate.forAccessOrigin().matching(packageIdentifiers), GET_ACCESSES_TO_SELF);
     }
 
     /**
@@ -247,25 +334,30 @@ public final class ArchConditions {
     }
 
     /**
-     * @param predicate A predicate identifying relevant dependencies on this class
-     * @return A condition matching {@link JavaClass classes} that have other classes
-     * depending on them (e.g. calling methods of this class)
-     * where the respective dependency is matched by the predicate
+     * @param predicate A predicate specifying allowed dependencies on this class
+     * @return A condition satisfied by {@link JavaClass classes} where all classes
+     * depending on them (e.g. calling methods of this class) are matched by the predicate
+     */
+    @PublicAPI(usage = ACCESS)
+    public static ArchCondition<JavaClass> onlyHaveDependentClassesThat(DescribedPredicate<? super JavaClass> predicate) {
+        return onlyHaveDependentsWhere(GET_ORIGIN_CLASS.is(predicate))
+                .as("only have dependent classes that " + predicate.getDescription());
+    }
+
+    /**
+     * @param predicate A predicate specifying allowed dependencies on this class
+     * @return A condition satisfied by {@link JavaClass classes} where all {@link Dependency dependencies}
+     * on them (e.g. calling methods of this class) are matched by the predicate
      */
     @PublicAPI(usage = ACCESS)
     public static ArchCondition<JavaClass> onlyHaveDependentsWhere(DescribedPredicate<? super Dependency> predicate) {
         String description = "only have dependents where " + predicate.getDescription();
-        return new AllDependenciesCondition(description, predicate, new Function<JavaClass, Collection<Dependency>>() {
-            @Override
-            public Collection<Dependency> apply(JavaClass input) {
-                return input.getDirectDependenciesToSelf();
-            }
-        });
+        return new AllDependenciesCondition(description, predicate, GET_DIRECT_DEPENDENCIES_TO_SELF);
     }
 
     /**
      * @param packageIdentifiers Strings identifying packages according to {@link PackageMatcher}
-     * @return A condition matching {@link JavaClass classes} that depend on
+     * @return A condition matching {@link JavaClass classes} that only depend on
      * other classes (e.g. this class calling methods of other classes)
      * with a package matching any of the identifiers
      */
@@ -286,12 +378,7 @@ public final class ArchConditions {
     @PublicAPI(usage = ACCESS)
     public static AllDependenciesCondition onlyHaveDependenciesWhere(DescribedPredicate<? super Dependency> predicate) {
         String description = "only have dependencies where " + predicate.getDescription();
-        return new AllDependenciesCondition(description, predicate, new Function<JavaClass, Collection<Dependency>>() {
-            @Override
-            public Collection<Dependency> apply(JavaClass input) {
-                return input.getDirectDependenciesFromSelf();
-            }
-        });
+        return new AllDependenciesCondition(description, predicate, GET_DIRECT_DEPENDENCIES_FROM_SELF);
     }
 
     @PublicAPI(usage = ACCESS)
@@ -856,31 +943,4 @@ public final class ArchConditions {
         };
     }
 
-    private static class CallMethodPredicate extends DescribedPredicate<JavaCall<?>> {
-        private final DescribedPredicate<? super JavaMethodCall> predicate;
-
-        CallMethodPredicate(DescribedPredicate<? super JavaMethodCall> predicate) {
-            super(predicate.getDescription());
-            this.predicate = predicate;
-        }
-
-        @Override
-        public boolean apply(JavaCall<?> input) {
-            return input instanceof JavaMethodCall && predicate.apply((JavaMethodCall) input);
-        }
-    }
-
-    private static class CallConstructorPredicate extends DescribedPredicate<JavaCall<?>> {
-        private final DescribedPredicate<? super JavaConstructorCall> predicate;
-
-        CallConstructorPredicate(DescribedPredicate<? super JavaConstructorCall> predicate) {
-            super(predicate.getDescription());
-            this.predicate = predicate;
-        }
-
-        @Override
-        public boolean apply(JavaCall<?> input) {
-            return input instanceof JavaConstructorCall && predicate.apply((JavaConstructorCall) input);
-        }
-    }
 }

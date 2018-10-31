@@ -1,3 +1,5 @@
+import org.gradle.internal.os.OperatingSystem
+
 import java.nio.file.Files
 
 def repositoryUrls = [
@@ -42,6 +44,12 @@ File verificationTestPath = new File(mavenTestRootDir, 'verification/TestResultT
 File verificationResultOriginPath = new File(mavenTestRootDir, 'target/surefire-reports')
 File verificationResultArchivePath = new File(mavenTestRootDir, 'verification-results')
 
+clean {
+    doLast {
+        verificationResultArchivePath.deleteDir()
+    }
+}
+
 task initializeMavenTest {
     doLast {
         verificationResultArchivePath.with {
@@ -49,6 +57,12 @@ task initializeMavenTest {
             assert mkdir(): "Couldn't create directory ${delegate}"
         }
     }
+}
+
+def mavenCommand = { String... params ->
+    OperatingSystem.current().isWindows() ?
+            ['cmd', '/c', 'mvnw.cmd'] + params.toList() :
+            ['./mvnw'] + params.toList()
 }
 
 def addMavenTest = { config ->
@@ -105,11 +119,11 @@ def addMavenTest = { config ->
         }
 
         tasks.create(name: executeRules, type: Exec, dependsOn: prepareMavenTest).configure mavenExec {
-            commandLine './mvnw', 'clean', 'test', '-P', 'execute-rules'
+            commandLine mavenCommand('clean', 'test', '-P', 'execute-rules')
         }
 
         tasks.create(name: verifyRules, type: Exec, dependsOn: executeRules).configure mavenExec {
-            commandLine './mvnw', 'surefire:test', '-P', 'verify-rules'
+            commandLine mavenCommand('surefire:test', '-P', 'verify-rules')
         }
 
         tasks.create(name: cleanUpMavenTest) {
